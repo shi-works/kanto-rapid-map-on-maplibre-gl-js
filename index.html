@@ -1,0 +1,561 @@
+<html>
+
+<head>
+    <title>関東平野迅速測図及び東京図測量原図（PMTiles）</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/pmtiles@2.10.0/dist/index.js"></script>
+    <script type="module" src="maplibre-gl-gsi-terrain-fast-png.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .map-overlay {
+            font: bold 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            position: absolute;
+            width: 200px;
+            bottom: 20px;
+            left: 0px;
+            padding: 10px;
+        }
+
+        .map-overlay .map-overlay-inner {
+            background-color: #fff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .map-overlay label {
+            display: block;
+            margin: 0 0 0px;
+            font-size: 12px;
+            top: 100px;
+            left: 10px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .map-overlay input {
+            background-color: transparent;
+            display: inline-block;
+            width: 100%;
+            position: relative;
+            margin: 0;
+            cursor: ew-resize;
+        }
+
+        #menu {
+            position: absolute;
+            top: 0%;
+            left: 0%;
+            background: #3e3e3ec7;
+            color: #ffffff;
+            padding: 10px;
+            font-family: 'Open Sans', sans-serif;
+        }
+
+        #menu ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .legend-png {
+            position: absolute;
+            bottom: 180px;
+            right: 10px;
+            z-index: 1;
+            background: white;
+            padding: 5px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            width: fit-content;
+        }
+
+        .image-container {
+            display: flex;
+            justify-content: center;
+        }
+
+        .legend-png img {
+            width: 96px;
+            height: 240px;
+        }
+
+        .legend {
+            background-color: #fff;
+            border-radius: 3px;
+            bottom: 60px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+            font: 12px/14px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            padding: 10px;
+            position: absolute;
+            right: 10px;
+            z-index: 1;
+            line-height: 10px;
+            height: auto;
+        }
+
+        .legend h4 {
+            margin: 0 0 10px;
+        }
+
+        .legend div span {
+            border-radius: 50%;
+            display: inline-block;
+            height: 15px;
+            margin-right: 10px;
+            width: 15px;
+            color: orangered
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div class="map-overlay top">
+        <div class="map-overlay-inner">
+            <label>迅速測図 不透明度: <span id="ortho-slider-opacity-value">0%</span></label>
+            <input id="ortho-slider-opacity" type="range" min="0" max="100" step="1" value="100">
+        </div>
+    </div>
+    <div id="menu">
+        <ul>
+            <li><input id="layer-1" type="checkbox" value="kanto_rapid" checked><label for="std">関東平野迅速測図</label></li>
+            <li><input id="layer-2" type="checkbox" value="tokyo5000"><label for="std">東京図測量原図</label></li>
+        </ul>
+    </div>
+    <div class="legend-png" style="display: block;">
+        <div class="image-container">
+            <img src="sokuzu_legend.jpg" alt="Legend">
+        </div>
+    </div>
+    <div id='legend' class='legend'>
+        <h4>凡例</h4>
+        <div><img src="./img/red-circle.png" alt="迅速測図-図郭外部-視図" style="width:20px; height:20px;" />視図</div>
+        <br>
+        <div><img src="./img/blu-circle.png" alt="迅速測図-図郭外部-断面図" style="width:20px; height:20px;" />断面図</div>
+        <br>
+    </div>
+
+    <script>
+        let protocol = new pmtiles.Protocol();
+        maplibregl.addProtocol("pmtiles", protocol.tile);
+
+        // 関東平野迅速測図PMTiles
+        let PMTiles_Kanto_URL = "https://pmtiles-data.s3.ap-northeast-1.amazonaws.com/naro/kanto_rapid-900913.png.pmtiles";
+
+        // 東京図測量原図PMTiles
+        let PMTiles_Tokyo_URL = "https://pmtiles-data.s3.ap-northeast-1.amazonaws.com/naro/tokyo5000-900913.png.pmtiles";
+
+        const p1 = new pmtiles.PMTiles(PMTiles_Kanto_URL)
+        const p2 = new pmtiles.PMTiles(PMTiles_Tokyo_URL)
+
+        p1.getMetadata().then((res) => console.log(res));
+        p2.getMetadata().then((res) => console.log(res));
+
+        protocol.add(p1);
+        protocol.add(p2);
+
+        // マップを初期化
+        var map = new maplibregl.Map({
+            container: 'map',
+            // style: 'https://tile2.openstreetmap.jp/styles/osm-bright/style.json',
+            // style: './std.json',
+            style: './std_pmtiles.json',
+            center: [140.008, 35.675],
+            zoom: 8.34,
+            minzoom: 1,
+            maxzoom: 23,
+            pitch: 0,
+            bearing: 0,
+            hash: true,
+            attributionControl: false
+        });
+
+        // ズーム・回転
+        map.addControl(new maplibregl.NavigationControl());
+
+        // フルスクリーンモードのオンオフ
+        map.addControl(new maplibregl.FullscreenControl());
+
+        // 現在位置表示
+        map.addControl(new maplibregl.GeolocateControl({
+            positionOptions: {
+                enableHighAccuracy: false
+            },
+            fitBoundsOptions: { maxZoom: 18 },
+            trackUserLocation: true,
+            showUserLocation: true
+        }));
+
+        // スケール表示
+        map.addControl(new maplibregl.ScaleControl({
+            maxWidth: 200,
+            unit: 'metric'
+        }));
+
+        // Attributionを折りたたみ表示
+        map.addControl(new maplibregl.AttributionControl({
+            compact: true,
+            customAttribution: '<a href="https://twitter.com/syanseto" target="_blank">Twitter</a> | <a href="" target="_blank">Github</a>'
+        }));
+
+        // 3D地形コントロール
+        map.addControl(
+            new maplibregl.TerrainControl({
+                source: 'gsidem',
+                exaggeration: 1 // 標高を強調する倍率
+            })
+        );
+
+        map.on('load', () => {
+            // 標高タイルソース
+            map.addSource("gsidem", {
+                type: 'raster-dem',
+                tiles: [
+                    'gsidem://https://cyberjapandata.gsi.go.jp/xyz/dem_png/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#dem">地理院タイル(標高タイル)</a>',
+                tileSize: 256
+            });
+
+            // 陰影起伏図ソース
+            map.addSource("hillshade", {
+                type: 'raster',
+                tiles: [
+                    'https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png',
+                ],
+                attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html#hillshademap" target="_blank">地理院タイル(陰影起伏図)</a>',
+                tileSize: 256
+            });
+
+            // 陰影起伏図レイヤ
+            map.addLayer({
+                id: 'hillshade-tiles',
+                type: 'raster',
+                source: 'hillshade',
+                minzoom: 2,
+                maxzoom: 18,
+                paint: {
+                    'raster-opacity': 0.3
+                }
+            });
+
+            // 関東平野迅速測図PMTilesソース
+            map.addSource("pmtiles-kanto-rapid", {
+                type: "raster",
+                url: "pmtiles://" + PMTiles_Kanto_URL,
+                attribution: '<a href="https://habs.rad.naro.go.jp/">農研機構 農研機構農業環境研究部門 歴史的農業環境閲覧システム</a>'
+            });
+
+            // 関東平野迅速測図PMTilesレイヤ
+            map.addLayer({
+                'id': 'pmtiles-kanto-rapid',
+                'type': "raster",
+                'source': 'pmtiles-kanto-rapid',
+                "minzoom": 1,
+                "maxzoom": 23,
+                'layout': {
+                    'visibility': 'visible'
+                }
+            });
+
+            // 関東京図測量原図PMTilesソース
+            map.addSource("pmtiles-tokyo5000", {
+                type: "raster",
+                url: "pmtiles://" + PMTiles_Tokyo_URL,
+                attribution: '<a href="https://habs.rad.naro.go.jp/">農研機構 農研機構農業環境研究部門 歴史的農業環境閲覧システム</a>'
+            });
+
+            // 東京図測量原図PMTilesレイヤ
+            map.addLayer({
+                'id': 'pmtiles-tokyo5000',
+                'type': "raster",
+                'source': 'pmtiles-tokyo5000',
+                "minzoom": 1,
+                "maxzoom": 23,
+                'layout': {
+                    'visibility': 'none'
+                }
+            });
+
+            /*
+            // 関東平野迅速測図ラスタタイルソース
+            map.addSource("pngtiles-kanto-rapid", {
+                type: "raster",
+                url: "https://boiledorange73.sakura.ne.jp/ws/tile/Kanto_Rapid-900913/{z}/{x}/{y}.png",
+                attribution: '<a href="https://habs.rad.naro.go.jp/">農研機構 農研機構農業環境研究部門 歴史的農業環境閲覧システム</a>'
+            });
+
+            // 関東平野迅速測図ラスタタイルレイヤ
+            map.addLayer({
+                'id': 'pngtiles-kanto-rapid',
+                'type': "raster",
+                'source': 'pngtiles-kanto-rapid',
+                "minzoom": 1,
+                "maxzoom": 23,
+            });
+            */
+
+            const orthosliderOpactiy = document.getElementById('ortho-slider-opacity');
+            const orthosliderOpactiyValue = document.getElementById('ortho-slider-opacity-value');
+
+            orthosliderOpactiy.addEventListener('input', (e) => {
+                map.setPaintProperty(
+                    'pmtiles-kanto-rapid',
+                    'raster-opacity',
+                    parseInt(e.target.value, 10) / 100
+                );
+                map.setPaintProperty(
+                    'pmtiles-tokyo5000',
+                    'raster-opacity',
+                    parseInt(e.target.value, 10) / 100
+                );
+                orthosliderOpactiyValue.textContent = e.target.value + '%';
+            });
+
+            map.showTileBoundaries = false;
+
+            let check1 = document.getElementById('layer-1');
+            let check2 = document.getElementById('layer-2');
+            let legendPng = document.querySelector('.legend-png');
+
+            document.getElementById('layer-1').addEventListener('click', () => {
+                if (check1.checked) {
+                    map.setLayoutProperty('pmtiles-kanto-rapid', 'visibility', 'visible');
+                    legendPng.style.display = 'block';  // legend-pngを表示
+                } else {
+                    map.setLayoutProperty('pmtiles-kanto-rapid', 'visibility', 'none');
+                    legendPng.style.display = 'none';  // legend-pngを非表示
+                }
+            });
+
+            document.getElementById('layer-2').addEventListener('click', () => {
+                check2.checked ? map.setLayoutProperty('pmtiles-tokyo5000', 'visibility', 'visible') : map.setLayoutProperty('pmtiles-tokyo5000', 'visibility', 'none');;
+            });
+
+            // 役場ソース
+            map.addSource('town-hall', {
+                'type': 'geojson',
+                'data': './P05-22_01_47_town_hall_add_cityname.geojson',
+                attribution: '<a href="https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P05-v3_0.html">国土数値情報 市町村役場（令和4年度）</a>'
+            });
+
+            // 役場ポイントレイヤ
+            // 外側の黒い円
+            map.addLayer({
+                'id': 'town-hall-points-outer-1',
+                'type': 'circle',
+                'source': 'town-hall',
+                'minzoom': 9,
+                'maxzoom': 12,
+                'paint': {
+                    'circle-color': 'rgba(0, 0, 0, 1)',
+                    'circle-radius': 5.5,
+                    'circle-blur': 0,
+                    'circle-opacity': 1
+                }
+            });
+
+            // 内側の白い円
+            map.addLayer({
+                'id': 'town-hall-points-inner-1',
+                'type': 'circle',
+                'source': 'town-hall',
+                'minzoom': 9,
+                'maxzoom': 12,
+                'paint': {
+                    'circle-color': 'rgba(255, 255, 255, 1)',
+                    'circle-radius': 4,
+                    'circle-blur': 0,
+                    'circle-opacity': 1
+                }
+            });
+
+            // 外側の黒い円
+            map.addLayer({
+                'id': 'town-hall-points-outer-2',
+                'type': 'circle',
+                'source': 'town-hall',
+                'minzoom': 9,
+                'maxzoom': 12,
+                'paint': {
+                    'circle-color': 'rgba(0, 0, 0, 1)',
+                    'circle-radius': 3,
+                    'circle-blur': 0,
+                    'circle-opacity': 1
+                }
+            });
+
+            // 内側の白い円
+            map.addLayer({
+                'id': 'town-hall-points-inner-2',
+                'type': 'circle',
+                'source': 'town-hall',
+                'minzoom': 9,
+                'maxzoom': 12,
+                'paint': {
+                    'circle-color': 'rgba(255, 255, 255, 1)',
+                    'circle-radius': 2.25,
+                    'circle-blur': 0,
+                    'circle-opacity': 1
+                }
+            });
+
+            // 役場ラベルレイヤ
+            map.addLayer({
+                'id': 'town-hall-labels-1',
+                'type': 'symbol',
+                'source': 'town-hall',
+                minzoom: 9,
+                maxzoom: 12,
+                'layout': {
+                    'text-field': ['get', 'city_name'],
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-size': 12,
+                    'text-anchor': 'center',
+                    'text-justify': 'center',
+                    'text-offset': [0, -1.0],
+                },
+                'paint': {
+                    'text-color': 'rgba(0, 0, 0, 1)',
+                    'text-halo-color': 'rgba(255, 255, 255, 1)',
+                    'text-halo-width': 1
+                }
+            });
+
+            // 役場ラベルレイヤ
+            map.addLayer({
+                'id': 'town-hall-labels-2',
+                'type': 'symbol',
+                'source': 'town-hall',
+                minzoom: 12,
+                maxzoom: 18,
+                'layout': {
+                    'text-field': ['get', 'city_name'],
+                    'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+                    'text-size': 18,
+                    'text-anchor': 'center',
+                    'text-justify': 'center',
+                    'text-offset': [0, -1.0],
+                },
+                'paint': {
+                    'text-color': 'rgba(0, 0, 0, 1)',
+                    'text-halo-color': 'rgba(255, 255, 255, 1)',
+                    'text-halo-width': 2
+                }
+            });
+
+            // 迅速測図の図郭外部に描かれた視図
+            map.addSource('shizu', {
+                'type': 'geojson',
+                'data': './shizu.geojson',
+                attribution: '<a href="https://habs.rad.naro.go.jp/">農研機構 農研機構農業環境研究部門 歴史的農業環境閲覧システム</a>'
+            });
+
+            // シンボル定義
+            map.loadImage('./img/red-circle.png',
+                function (error, image) {
+                    if (error) throw error;
+                    map.addImage('red-circle', image);
+                }
+            );
+
+            // 視図シンボルレイヤ
+            map.addLayer({
+                'id': 'shizu',
+                "type": "symbol",
+                'source': 'shizu',
+                minzoom: 9,
+                maxzoom: 23,
+                "layout": {
+                    "icon-image": "red-circle",
+                    "icon-size": 0.4
+                }
+            });
+
+            // 迅速測図の図郭外部に描かれた断面図
+            map.addSource('danmenzu', {
+                'type': 'geojson',
+                'data': './danmenzu.geojson',
+                attribution: '<a href="https://habs.rad.naro.go.jp/">農研機構 農研機構農業環境研究部門 歴史的農業環境閲覧システム</a>'
+            });
+
+            // シンボル定義
+            map.loadImage('./img/blu-circle.png',
+                function (error, image) {
+                    if (error) throw error;
+                    map.addImage('blu-circle', image);
+                }
+            );
+
+            // 断面図シンボルレイヤ
+            map.addLayer({
+                'id': 'danmenzu',
+                "type": "symbol",
+                'source': 'danmenzu',
+                minzoom: 9,
+                maxzoom: 23,
+                "layout": {
+                    "icon-image": "blu-circle",
+                    "icon-size": 0.4
+                }
+            });
+
+        })
+
+        // 視図ポップアップ表示
+        map.on('click', 'shizu', (e) => {
+            var lng = e.features[0].geometry.coordinates[0];
+            var lat = e.features[0].geometry.coordinates[1];
+            var description = e.features[0].properties['description'];
+            // descriptionから画像のURLを取得
+            var imgURL = description.match(/src="([^"]*)/)[1];
+            // 画像タグにスタイルを適用し、その画像を<a>タグで囲む
+            var imgTag = `<div><a href="${imgURL}" target="_blank"><img src="${imgURL}" style="width: 100%; height: auto;"></a></div>`;
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(
+                    imgTag +
+                    '<div><a href="https://www.google.com/maps?q=' + lat + ',' + lng + '&hl=ja" target="_blank">🌎Google Maps</a></div>' +
+                    '<div><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + lat + ',' + lng + '&hl=ja" target="_blank">📷Street View</a></div>'
+                )
+                .addTo(map);
+        });
+
+        // 断面図ポップアップ表示
+        map.on('click', 'danmenzu', (e) => {
+            var lng = e.features[0].geometry.coordinates[0];
+            var lat = e.features[0].geometry.coordinates[1];
+            var description = e.features[0].properties['description'];
+            // descriptionから画像のURLを取得
+            var imgURL = description.match(/src="([^"]*)/)[1];
+            // 画像タグにスタイルを適用し、その画像を<a>タグで囲む
+            var imgTag = `<div><a href="${imgURL}" target="_blank"><img src="${imgURL}" style="width: 100%; height: auto;"></a></div>`;
+            new maplibregl.Popup()
+                .setLngLat(e.lngLat)
+                .setHTML(
+                    imgTag +
+                    '<div><a href="https://www.google.com/maps?q=' + lat + ',' + lng + '&hl=ja" target="_blank">🌎Google Maps</a></div>' +
+                    '<div><a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + lat + ',' + lng + '&hl=ja" target="_blank">📷Street View</a></div>'
+                )
+                .addTo(map);
+        });
+
+    </script>
+</body>
+
+</html>
